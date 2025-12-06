@@ -3,8 +3,10 @@ import numpy as np
 from PIL import Image
 
 IMAGE_SIZE = (224, 224)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATABASE_FOLDER = os.path.join(BASE_DIR, "database_img")
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+DATABASE_FOLDER = os.path.join(project_root, "database_img")
 
 MOCK_PATIENT_DB = {
     "Sarah": {
@@ -18,7 +20,7 @@ MOCK_PATIENT_DB = {
 }
 
 def process_image_to_vector(image: Image.Image):
-    img_processed = image.convert("L").resize(IMAGE_SIZE)
+    img_processed = image.convert("RGB").convert("L").resize(IMAGE_SIZE)
     vec = np.array(img_processed).flatten().astype(float)
     norm = np.linalg.norm(vec)
     if norm == 0:
@@ -27,10 +29,13 @@ def process_image_to_vector(image: Image.Image):
 
 def load_database_from_folder(folder_path=DATABASE_FOLDER):
     db = {}
+    
     if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
+        print(f"Warning: Database folder not found at {folder_path}")
         return db
 
+    print(f"Loading images from: {folder_path}")
+    
     files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
     
     for filename in files:
@@ -39,7 +44,9 @@ def load_database_from_folder(folder_path=DATABASE_FOLDER):
             with Image.open(filepath) as img:
                 vector = process_image_to_vector(img)
                 db[filename] = vector
-        except Exception:
+                print(f"Loaded: {filename}")
+        except Exception as e:
+            print(f"Failed to load {filename}: {e}")
             pass
             
     return db
