@@ -4,7 +4,7 @@ from PIL import Image
 
 IMAGE_SIZE = (224, 224)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RAW_FOLDER = os.path.join(BASE_DIR, "raw")
+DATABASE_FOLDER = os.path.join(BASE_DIR, "database_img")
 
 MOCK_PATIENT_DB = {
     "Sarah": {
@@ -25,7 +25,7 @@ def process_image_to_vector(image: Image.Image):
         return vec
     return vec / norm
 
-def load_database_from_folder(folder_path=RAW_FOLDER):
+def load_database_from_folder(folder_path=DATABASE_FOLDER):
     db = {}
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)

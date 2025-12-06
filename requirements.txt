@@ -1,6 +1,6 @@
 fastapi
 uvicorn
+pydantic
 numpy
 pillow
-pydantic
 python-multipart
