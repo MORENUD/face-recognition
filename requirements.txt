@@ -3,4 +3,8 @@ uvicorn
 pydantic
 numpy
 pillow
-python-multipart
+requests
+deepface
+tf-keras
+opencv-python-headless
+retina-face

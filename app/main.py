@@ -1,12 +1,19 @@
 import uvicorn
 import base64
 import io
+import os
 from PIL import Image
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from recognition import *
+
+from recognition import (
+    load_database_from_folder, 
+    get_face_embedding, 
+    find_match, 
+    get_patient_info
+)
 
 ml_resources = {}
 
@@ -17,12 +24,11 @@ async def lifespan(app: FastAPI):
     yield
     ml_resources.clear()
 
-app = FastAPI(title="Simple Face Auth API", lifespan=lifespan)
+app = FastAPI(title="Face Auth API", lifespan=lifespan)
 
-origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,14 +44,13 @@ class DebugInfo(BaseModel):
 class PredictionResponse(BaseModel):
     user_name: str
     disease: str
-    appointment_day: int
+    current_appointment: str
     debug_info: DebugInfo
 
 def decode_base64_image(base64_str: str) -> Image.Image:
     try:
         if "," in base64_str:
             base64_str = base64_str.split(",")[1]
-        
         image_data = base64.b64decode(base64_str)
         return Image.open(io.BytesIO(image_data))
     except Exception:
@@ -54,49 +59,48 @@ def decode_base64_image(base64_str: str) -> Image.Image:
 @app.post("/recognize", response_model=PredictionResponse)
 async def recognize_face(payload: ImageRequest):
     known_database = ml_resources.get("known_database")
-    if not known_database:
-        raise HTTPException(status_code=500, detail="Database empty")
-
-    input_image = decode_base64_image(payload.image_base64)
+    if known_database is None:
+        known_database = {}
 
     try:
-        target_vector = process_image_to_vector(input_image)
+        input_image = decode_base64_image(payload.image_base64)
+        target_encoding = get_face_embedding(input_image)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Image processing failed: {str(e)}")
 
-    matched_filename, score = find_match(
-        target_vector, 
-        known_database, 
-        threshold=0.8
-    )
-
-    if matched_filename == "No match":
+    if target_encoding is None:
         return {
-            "user_name": "NA",
+            "user_name": "No Face Detected",
             "disease": "NA",
-            "appointment_day": 0,
+            "current_appointment": '2099-12-31',
+            "debug_info": {"file": "NA", "score": 0.0}
+        }
+
+    closest_filename, score, is_match = find_match(target_encoding, known_database, threshold=0.40)
+
+    if not is_match:
+        return {
+            "user_name": "Unknown",
+            "disease": "NA",
+            "current_appointment": '2099-12-31',
             "debug_info": {
-                "file": "NA",
-                "score": 0.0
+                "file": closest_filename,
+                "score": round(score, 4)
             }
         }
 
-    real_name = matched_filename.split('.')[0]
-    patient_info = get_patient_info(matched_filename)
+    real_name = os.path.splitext(closest_filename)[0]
+    patient_info = get_patient_info(closest_filename)
 
-    if patient_info:
-        disease = patient_info["disease"]
-        appt_day = patient_info["appointment_day"]
-    else:
-        disease = "Unknown Data"
-        appt_day = 0
+    disease = patient_info["disease"] if patient_info else "Data Not Found"
+    appt_day = patient_info["current_appointment"] if patient_info else "2099-12-31"
 
     return {
         "user_name": real_name,
         "disease": disease,
-        "appointment_day": appt_day,
+        "current_appointment": appt_day,
         "debug_info": {
-            "file": matched_filename,
+            "file": closest_filename,
             "score": round(score, 4)
         }
     }
