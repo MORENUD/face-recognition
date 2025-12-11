@@ -1,12 +1,16 @@
 import os
 import numpy as np
+import traceback
 from PIL import Image
 from deepface import DeepFace
 
+# Force CPU mode (Cloud free tiers usually lack GPU)
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 MODEL_NAME = "Facenet512"
+# "opencv" is lightweight and fits in 512MB RAM. 
+# Do NOT use "retinaface" on free tier.
 DETECTOR_BACKEND = "opencv"
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,13 +23,18 @@ MOCK_PATIENT_DB = {
 
 def get_face_embedding(image: Image.Image):
     try:
+        # Convert PIL image to Numpy array (BGR format for OpenCV/DeepFace)
         img_rgb = np.array(image.convert("RGB"))
         img_bgr = img_rgb[:, :, ::-1]
+        
+        print(f"DEBUG: Processing image shape: {img_bgr.shape}")
+
         embedding_objs = DeepFace.represent(
             img_path=img_bgr,
             model_name=MODEL_NAME,
             detector_backend=DETECTOR_BACKEND,
-            anti_spoofing=True,
+            align=True,           # Helps OpenCV accuracy
+            anti_spoofing=False,  # CRITICAL: Must be FALSE for free tier RAM
             enforce_detection=True
         )
         
@@ -33,18 +42,25 @@ def get_face_embedding(image: Image.Image):
             return embedding_objs[0]["embedding"]
         return None
 
-    except ValueError:
+    except ValueError as e:
+        print(f"DEBUG: Face not found (ValueError): {e}")
         return None
-    except Exception:
+    except Exception as e:
+        print(f"DEBUG: DeepFace Error: {e}")
+        traceback.print_exc() # This prints the full error to Render logs
         return None
 
 def load_database_from_folder(folder_path=DATABASE_FOLDER):
     db = {}
+    print(f"DEBUG: Loading DB from {folder_path}")
+    
     if not os.path.exists(folder_path):
         os.makedirs(folder_path, exist_ok=True)
+        print("DEBUG: Created database folder")
         return db
 
     files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    print(f"DEBUG: Found {len(files)} images in database")
     
     for filename in files:
         filepath = os.path.join(folder_path, filename)
@@ -53,13 +69,16 @@ def load_database_from_folder(folder_path=DATABASE_FOLDER):
                 img_path=filepath,
                 model_name=MODEL_NAME,
                 detector_backend=DETECTOR_BACKEND,
-                enforce_detection=False 
+                enforce_detection=False,
+                align=True
             )
             
             if len(embedding_objs) > 0:
                 db[filename] = embedding_objs[0]["embedding"]
+                print(f"DEBUG: Loaded {filename}")
                 
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: Failed to load {filename}: {e}")
             pass
             
     return db
@@ -75,6 +94,7 @@ def find_match(target_encoding, database, threshold=0.4):
     for filename, db_encoding in database.items():
         db_vector = np.array(db_encoding)
         
+        # Cosine Similarity Calculation
         dot_product = np.dot(target_vector, db_vector)
         norm_a = np.linalg.norm(target_vector)
         norm_b = np.linalg.norm(db_vector)

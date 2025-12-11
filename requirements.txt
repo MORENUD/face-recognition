@@ -1,10 +1,9 @@
 fastapi
 uvicorn
-pydantic
-numpy
-pillow
-requests
+# deepface requires tf-keras or tensorflow depending on version, keep your working one.
 deepface
-tf-keras
+tf-keras 
+pillow
+numpy
+# IMPORTANT: Use headless to save space/memory
 opencv-python-headless
-retina-face
