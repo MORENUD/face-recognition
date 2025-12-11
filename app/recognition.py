@@ -4,13 +4,10 @@ import traceback
 from PIL import Image
 from deepface import DeepFace
 
-# Force CPU mode (Cloud free tiers usually lack GPU)
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 MODEL_NAME = "Facenet512"
-# "opencv" is lightweight and fits in 512MB RAM. 
-# Do NOT use "retinaface" on free tier.
 DETECTOR_BACKEND = "opencv"
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +20,6 @@ MOCK_PATIENT_DB = {
 
 def get_face_embedding(image: Image.Image):
     try:
-        # Convert PIL image to Numpy array (BGR format for OpenCV/DeepFace)
         img_rgb = np.array(image.convert("RGB"))
         img_bgr = img_rgb[:, :, ::-1]
         
@@ -33,8 +29,8 @@ def get_face_embedding(image: Image.Image):
             img_path=img_bgr,
             model_name=MODEL_NAME,
             detector_backend=DETECTOR_BACKEND,
-            align=True,           # Helps OpenCV accuracy
-            anti_spoofing=False,  # CRITICAL: Must be FALSE for free tier RAM
+            align=True,
+            anti_spoofing=False,
             enforce_detection=True
         )
         
@@ -47,7 +43,7 @@ def get_face_embedding(image: Image.Image):
         return None
     except Exception as e:
         print(f"DEBUG: DeepFace Error: {e}")
-        traceback.print_exc() # This prints the full error to Render logs
+        traceback.print_exc()
         return None
 
 def load_database_from_folder(folder_path=DATABASE_FOLDER):
@@ -94,7 +90,6 @@ def find_match(target_encoding, database, threshold=0.4):
     for filename, db_encoding in database.items():
         db_vector = np.array(db_encoding)
         
-        # Cosine Similarity Calculation
         dot_product = np.dot(target_vector, db_vector)
         norm_a = np.linalg.norm(target_vector)
         norm_b = np.linalg.norm(db_vector)
